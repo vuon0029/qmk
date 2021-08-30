@@ -16,21 +16,57 @@
 
 
 #include QMK_KEYBOARD_H
+#include <stdio.h>
+
+// OLED setup for bongocat
+#define IDLE_FRAMES 3
+#define IDLE_SPEED 1000
+// #define TAP_FRAMES 7
+// #define TAP_SPEED 50
+#define ANIM_FRAME_DURATION 700
+#define ANIM_SIZE 512
+
+/* Matrix display is 19 x 9 pixels */
+#define MATRIX_DISPLAY_X 103
+#define MATRIX_DISPLAY_Y 30
+
+//unit
+#define GAP 2
+#define CUBE_NUMBER 7.5
+#define SPACE_UNIT 50
+#define TAB_UNIT 1.25
+#define CAPS_UNIT 1.5
+#define ENTER_UNIT 2
+#define RSHIFT_UNIT 1.75
+
+//row
+#define R1 1
+#define R2 2
+#define R3 3
+#define R4 4
+
+static long int oled_timeout = 3500;
+bool gui_on = true;
+bool display_keyboard = false;
+uint32_t anim_timer = 0;
+uint32_t anim_sleep = 0;
+uint8_t current_idle_frame = 0;
+uint8_t current_tap_frame = 0;
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 [0] = LAYOUT_all(
                                                                                                                 KC_MUTE,
-    KC_TAB,           KC_Q,    KC_W,    KC_E,    KC_R,    KC_T,    KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,    KC_BSPC,
-    MO(1),            KC_A,    KC_S,    KC_D,    KC_F,    KC_G,    KC_H,    KC_J,    KC_K,    KC_L,    KC_QUOT, KC_ENT,
+    KC_ESC,           KC_Q,    KC_W,    KC_E,    KC_R,    KC_T,    KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,    KC_BSPC,
+    KC_TAB,            KC_A,    KC_S,    KC_D,    KC_F,    KC_G,    KC_H,    KC_J,    KC_K,    KC_L,    KC_QUOT, KC_ENT,
     KC_LSFT, KC_SLSH, KC_Z,    KC_X,    KC_C,    KC_V,    KC_B,    KC_N,    KC_M,    KC_COMM, KC_DOT,           KC_RSFT,
-    KC_LCTL, KC_LGUI, KC_LALT,          KC_SPC,  KC_SPC,           KC_SPC,           KC_RALT, MO(2),            KC_RCTL ),
+    KC_LCTL, KC_LGUI, KC_LALT,          KC_SPC,  KC_SPC,           KC_SPC,           KC_RALT, MO(2),            MO(1) ),
 
   [1] = LAYOUT_all(
                                                                                                                 KC_TRNS,
-    KC_ESC,           KC_1,    KC_2,    KC_3,    KC_4,    KC_5,    KC_6,    KC_7,    KC_8,    KC_9,    KC_0,    KC_DEL,
-    KC_TRNS,          KC_TRNS, KC_GRV,  KC_BSLS, KC_TRNS, KC_TRNS, KC_TRNS, KC_LBRC, KC_RBRC, KC_SCLN, KC_TRNS, KC_QUOT,
-    KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_MINS, KC_EQL,  KC_SLSH,          KC_UP,
-    KC_TRNS, KC_TRNS, KC_TRNS,          KC_HOME, KC_TRNS,          KC_END,           KC_LEFT, KC_DOWN,          KC_RIGHT ),
+    KC_ESC,           KC_Q,    KC_W,    KC_E,    KC_R,    KC_T,    KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,    KC_BSPC,
+    KC_TAB,            KC_A,    KC_S,    KC_D,    KC_F,    KC_G,    KC_H,    KC_J,    KC_K,    KC_L,    KC_QUOT, KC_ENT,
+    KC_LSFT, KC_SLSH, KC_Z,    KC_X,    KC_C,    KC_V,    KC_B,    KC_N,    KC_M,    KC_COMM, KC_DOT,           KC_RSFT,
+    KC_LCTL, KC_LGUI, KC_LALT,          KC_SPC,  KC_SPC,           KC_SPC,           KC_RALT, MO(2),            KC_RCTL ),
 
   [2] = LAYOUT_all(
                                                                                                                 KC_TRNS,
@@ -61,7 +97,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
                         selected_layer ++;
                         layer_move(selected_layer);
                     } else {
-                        tap_code(KC_VOLU);                                                   // Otherwise it just changes volume
+                        tap_code(KC_VOLU);   // Otherwise it just changes volume
                     }
                 } else if ( !clockwise ) {
                     if ( selected_layer  > 0 && keyboard_report->mods & MOD_BIT(KC_LSFT) ){
@@ -82,35 +118,680 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     }
 
     bool clear_screen = false;          // used to manage singular screen clears to prevent display glitch
-    static void render_name(void) {     // Render Mercutio Script Text
-        static const char PROGMEM mercutio_name[] = {
-            0xB6, 0xB6, 0xB6, 0xB6, 0xB6, 0xB6, 0xB6, 0xB6, 0xB6, 0xB6, 0xB6, 0xB6, 0xB6, 0xB6, 0xB6, 0x95, 0xB5, 0x96, 0xD5, 0xB6, 0xB6,
-            0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8A, 0x8B, 0x8C, 0x8D, 0x8E, 0x8F, 0x90, 0x91, 0x92, 0x93, 0x94,
-            0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7, 0xA8, 0xA9, 0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF, 0xB0, 0xB1, 0xB2, 0xB3, 0xB4,
-            0xC0, 0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD, 0xCE, 0xCF, 0xD0, 0xD1, 0xD2, 0xD3, 0xD4, 0x00
-        };
-        oled_write_P(mercutio_name, false);
+
+    static void render_anim(void) {
+
+        // start screen animation
+
+    static const char PROGMEM rest[IDLE_FRAMES][ANIM_SIZE] = {
+        
+    {
+        0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 26, 30,  6,  0, 24,200,120, 24,  0,  0,  0,  0,128,192, 64, 64,192,192,192,192,192,192,192,192,192,192,192,192,224,192,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+        0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,224,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,129,248, 60, 30, 27, 17, 48, 48, 60, 63, 63, 63, 63, 63, 63, 19, 24, 24,124,254,131,193,195, 31,124,224,128,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 
+        0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,255,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 16,255,127,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  7,255,225, 15,140,192,113, 63, 12,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 
+        2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  3,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2, 14, 15, 12, 12, 44, 60, 28, 28, 12, 12, 12, 12, 12, 44, 60, 28, 12, 12, 12, 12, 12, 13, 15, 14,  7,  3,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+    },
+    {
+        0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 24,200,120, 24,  0,  0,  0,  0,128,192, 64, 64,192,192,192,192,192,192,192,192,192,192,192,192,224,192,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+        0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,224,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,129,248, 60, 30, 27, 17, 48, 48, 60, 63, 63, 63, 63, 63, 63, 19, 24, 24,124,254,131,193,195, 31,124,224,128,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 
+        0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,255,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 16,255,127,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  7,255,225, 15,140,192,113, 63, 12,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 
+        2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  3,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2, 14, 15, 12, 12, 44, 60, 28, 28, 12, 12, 12, 12, 12, 44, 60, 28, 12, 12, 12, 12, 12, 13, 15, 14,  7,  3,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+    },
+    {
+        0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,128,192, 64, 64,192,192,192,192,192,192,192,192,192,192,192,192,224,192,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+        0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,224,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,128,248, 60, 30, 27, 17, 48, 48, 60, 63, 63, 63, 63, 63, 63, 19, 24, 24,124,254,131,193,195, 31,124,224,128,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 
+        0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,255,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 16,255,127,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  7,255,225, 15,140,192,113, 63, 12,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 
+        2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  3,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2, 14, 15, 12, 12, 44, 60, 28, 28, 12, 12, 12, 12, 12, 44, 60, 28, 12, 12, 12, 12, 12, 13, 15, 14,  7,  3,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
     }
 
-    static void render_logo(void) {     // Render MechWild "MW" Logo
-        static const char PROGMEM logo_1[] = {0x97, 0x98, 0x99, 0x9A,0x00};
-        static const char PROGMEM logo_2[] = {0xB7, 0xB8, 0xB9, 0xBA, 0xBB, 0xBC, 0xBD, 0x00};
-        static const char PROGMEM logo_3[] = {0xD7, 0xD8, 0xD9, 0xDA, 0xDB, 0xDC, 0xDD, 0xB6, 0x00};
-        static const char PROGMEM logo_4[] = {0xB6, 0xB6, 0xB6, 0x9B, 0x9C, 0x9D, 0x9E, 0x00};
-        oled_set_cursor(0,0);
-        oled_write_P(logo_1, false);
-        oled_set_cursor(0,1);
-        oled_write_P(logo_2, false);
-        oled_set_cursor(0,2);
-        oled_write_P(logo_3, false);
-        oled_set_cursor(0,3);
-        oled_write_P(logo_4, false);
+
+    };
+
+    void animation_phase(void) {
+            current_idle_frame = (current_idle_frame + 1) % IDLE_FRAMES;
+            oled_write_raw_P(rest[abs((IDLE_FRAMES-1)-current_idle_frame)], ANIM_SIZE);
     }
+
+    if (get_current_wpm() != 000) {
+        oled_on();
+
+        if (timer_elapsed32(anim_timer) > ANIM_FRAME_DURATION) {
+            anim_timer = timer_read32();
+            animation_phase();
+        }
+
+        anim_sleep = timer_read32();
+    } else {
+        if (timer_elapsed32(anim_sleep) > oled_timeout) {
+            oled_off();
+        } else {
+            if (timer_elapsed32(anim_timer) > ANIM_FRAME_DURATION) {
+                anim_timer = timer_read32();
+                animation_phase();
+            }
+        }
+    }
+}
+    static void render_keyboard(void){
+
+        for (uint8_t x = 0; x < MATRIX_DISPLAY_X; x++) {
+            oled_write_pixel(x,0,true);
+        }
+        for (uint8_t y = 0; y < MATRIX_DISPLAY_Y; y++) {
+            oled_write_pixel(0,y,true);
+        }
+        for (uint8_t x = 0; x < MATRIX_DISPLAY_X; x++) {
+            oled_write_pixel(x,MATRIX_DISPLAY_Y,true);
+        }
+        for (uint8_t y = 0; y < MATRIX_DISPLAY_Y; y++) {
+            oled_write_pixel(MATRIX_DISPLAY_X,y,true);
+        }
+
+    }
+
+    bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    if (display_keyboard == true){
+        display_keyboard = false;
+        switch (keycode) {
+                case KC_ESC:
+                    if (record->event.pressed) {
+                        // x = position, y = row
+                        for (uint8_t x = 0; x < CUBE_NUMBER*TAB_UNIT; x++) {
+                            for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                                oled_write_pixel(x,y,true);
+                            }
+                        }
+                    } else {
+                        for (uint8_t x = 0; x < CUBE_NUMBER*TAB_UNIT; x++) {
+                            for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                                oled_write_pixel(x,y,false);
+                            }
+                        }
+                    }
+                    return true;
+                case KC_Q:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER+TAB_UNIT+GAP; x < CUBE_NUMBER*2+TAB_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER+TAB_UNIT+GAP; x < CUBE_NUMBER*2+TAB_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_W:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*2+TAB_UNIT+GAP; x < CUBE_NUMBER*3+TAB_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*2+TAB_UNIT+GAP; x < CUBE_NUMBER*3+TAB_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_E:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*3+TAB_UNIT+GAP; x < CUBE_NUMBER*4+TAB_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*3+TAB_UNIT+GAP; x < CUBE_NUMBER*4+TAB_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_R:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*4+TAB_UNIT+GAP; x < CUBE_NUMBER*5+TAB_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*4+TAB_UNIT+GAP; x < CUBE_NUMBER*5+TAB_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_T:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*5+TAB_UNIT+GAP; x < CUBE_NUMBER*6+TAB_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*5+TAB_UNIT+GAP; x < CUBE_NUMBER*6+TAB_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_Y:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*6+TAB_UNIT+GAP; x < CUBE_NUMBER*7+TAB_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*6+TAB_UNIT+GAP; x < CUBE_NUMBER*7+TAB_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_U:
+                    if (record->event.pressed) {
+                        // x = position, y = row
+                        for (uint8_t x = CUBE_NUMBER*7+TAB_UNIT+GAP; x < CUBE_NUMBER*8+TAB_UNIT; x++) {
+                            for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                                oled_write_pixel(x,y,true);
+                            }
+                        }
+                    } else {
+                        for (uint8_t x = CUBE_NUMBER*7+TAB_UNIT+GAP; x < CUBE_NUMBER*8+TAB_UNIT; x++) {
+                            for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                                oled_write_pixel(x,y,false);
+                            }
+                        }
+                    }
+                    return true;
+                case KC_I:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*8+TAB_UNIT+GAP; x < CUBE_NUMBER*9+TAB_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*8+TAB_UNIT+GAP; x < CUBE_NUMBER*9+TAB_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_O:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*9+TAB_UNIT+GAP; x < CUBE_NUMBER*10+TAB_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*9+TAB_UNIT+GAP; x < CUBE_NUMBER*10+TAB_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_P:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*10+TAB_UNIT+GAP; x < CUBE_NUMBER*11+TAB_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*10+TAB_UNIT+GAP; x < CUBE_NUMBER*11+TAB_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_BSPC:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*11+TAB_UNIT+GAP; x < CUBE_NUMBER*13+TAB_UNIT+ENTER_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*11+TAB_UNIT+GAP; x < CUBE_NUMBER*13+TAB_UNIT+ENTER_UNIT; x++) {
+                        for (uint8_t y = R1; y < CUBE_NUMBER; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_TAB:
+                if (record->event.pressed) {
+                    for (uint8_t x = 0; x < CUBE_NUMBER*CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = 0; x < CUBE_NUMBER*CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_A:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER+CAPS_UNIT+GAP; x < CUBE_NUMBER*2+CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER+CAPS_UNIT+GAP; x < CUBE_NUMBER*2+CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_S:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*2+CAPS_UNIT+GAP; x < CUBE_NUMBER*3+CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*2+CAPS_UNIT+GAP; x < CUBE_NUMBER*3+CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_D:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*3+CAPS_UNIT+GAP; x < CUBE_NUMBER*4+CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*3+CAPS_UNIT+GAP; x < CUBE_NUMBER*4+CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_F:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*4+CAPS_UNIT+GAP; x < CUBE_NUMBER*5+CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*4+CAPS_UNIT+GAP; x < CUBE_NUMBER*5+CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_G:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*5+CAPS_UNIT+GAP; x < CUBE_NUMBER*6+CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*5+CAPS_UNIT+GAP; x < CUBE_NUMBER*6+CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_H:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*6+CAPS_UNIT+GAP; x < CUBE_NUMBER*7+CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*6+CAPS_UNIT+GAP; x < CUBE_NUMBER*7+CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_J:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*7+CAPS_UNIT+GAP; x < CUBE_NUMBER*8+CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*7+CAPS_UNIT+GAP; x < CUBE_NUMBER*8+CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_K:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*8+CAPS_UNIT+GAP; x < CUBE_NUMBER*9+CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*8+CAPS_UNIT+GAP; x < CUBE_NUMBER*9+CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_L:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*9+CAPS_UNIT+GAP; x < CUBE_NUMBER*10+CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*9+CAPS_UNIT+GAP; x < CUBE_NUMBER*10+CAPS_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_ENT:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*10+CAPS_UNIT+GAP; x < CUBE_NUMBER*13+CAPS_UNIT+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*10+CAPS_UNIT+GAP; x < CUBE_NUMBER*13+CAPS_UNIT+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER+GAP; y < CUBE_NUMBER*R2; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_LSFT:
+                if (record->event.pressed) {
+                    for (uint8_t x = 0; x < CUBE_NUMBER+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = 0; x < CUBE_NUMBER+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_Z:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER+ENTER_UNIT+GAP; x < CUBE_NUMBER*2+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER+ENTER_UNIT+GAP; x < CUBE_NUMBER*2+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_X:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*2+ENTER_UNIT+GAP; x < CUBE_NUMBER*3+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*2+ENTER_UNIT+GAP; x < CUBE_NUMBER*3+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_C:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*3+ENTER_UNIT+GAP; x < CUBE_NUMBER*4+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*3+ENTER_UNIT+GAP; x < CUBE_NUMBER*4+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_V:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*4+ENTER_UNIT+GAP; x < CUBE_NUMBER*5+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*4+ENTER_UNIT+GAP; x < CUBE_NUMBER*5+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_B:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*5+ENTER_UNIT+GAP; x < CUBE_NUMBER*6+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*5+ENTER_UNIT+GAP; x < CUBE_NUMBER*6+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_N:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*6+ENTER_UNIT+GAP; x < CUBE_NUMBER*7+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*6+ENTER_UNIT+GAP; x < CUBE_NUMBER*7+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_M:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*7+ENTER_UNIT+GAP; x < CUBE_NUMBER*8+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*7+ENTER_UNIT+GAP; x < CUBE_NUMBER*8+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_COMM:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*8+ENTER_UNIT+GAP; x < CUBE_NUMBER*9+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*8+ENTER_UNIT+GAP; x < CUBE_NUMBER*9+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_DOT:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*9+ENTER_UNIT+GAP; x < CUBE_NUMBER*10+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*9+ENTER_UNIT+GAP; x < CUBE_NUMBER*10+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_RSFT:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*10+ENTER_UNIT+GAP; x < CUBE_NUMBER*13+CAPS_UNIT+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*10+ENTER_UNIT+GAP; x < CUBE_NUMBER*13+CAPS_UNIT+ENTER_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*2+GAP; y < CUBE_NUMBER*R3; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_LCTL:
+                if (record->event.pressed) {
+                    for (uint8_t x = 0; x < CUBE_NUMBER+RSHIFT_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*3+GAP; y < CUBE_NUMBER*R4; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = 0; x < CUBE_NUMBER+RSHIFT_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*3+GAP; y < CUBE_NUMBER*R4; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_LGUI:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER+RSHIFT_UNIT+GAP; x < CUBE_NUMBER*2+RSHIFT_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*3+GAP; y < CUBE_NUMBER*R4; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER+RSHIFT_UNIT+GAP; x < CUBE_NUMBER*2+RSHIFT_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*3+GAP; y < CUBE_NUMBER*R4; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_LALT:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*2+RSHIFT_UNIT+GAP; x < CUBE_NUMBER*3+RSHIFT_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*3+GAP; y < CUBE_NUMBER*R4; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*2+RSHIFT_UNIT+GAP; x < CUBE_NUMBER*3+RSHIFT_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*3+GAP; y < CUBE_NUMBER*R4; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_SPC:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*3+RSHIFT_UNIT+GAP; x < CUBE_NUMBER*4+RSHIFT_UNIT+SPACE_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*3+GAP; y < CUBE_NUMBER*R4; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*3+RSHIFT_UNIT+GAP; x < CUBE_NUMBER*4+RSHIFT_UNIT+SPACE_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*3+GAP; y < CUBE_NUMBER*R4; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                case KC_RALT:
+                if (record->event.pressed) {
+                    for (uint8_t x = CUBE_NUMBER*4+RSHIFT_UNIT+GAP+SPACE_UNIT; x < CUBE_NUMBER*5.25+RSHIFT_UNIT+SPACE_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*3+GAP; y < CUBE_NUMBER*R4; y++) {
+                            oled_write_pixel(x,y,true);
+                        }
+                    }
+                } else {
+                    for (uint8_t x = CUBE_NUMBER*4+RSHIFT_UNIT+GAP+SPACE_UNIT; x < CUBE_NUMBER*5.25+RSHIFT_UNIT+SPACE_UNIT; x++) {
+                        for (uint8_t y = CUBE_NUMBER*3+GAP; y < CUBE_NUMBER*R4; y++) {
+                            oled_write_pixel(x,y,false);
+                        }
+                    }
+                }
+                    return true;
+                default:
+                    return true;
+            }
+        }
+   
+    return true;
+}
 
     void oled_task_user(void) {
 
         if ( IS_HOST_LED_OFF(USB_LED_NUM_LOCK) && IS_HOST_LED_OFF(USB_LED_CAPS_LOCK) && selected_layer == 0 && get_highest_layer(layer_state) == 0 ) {
-            render_name();
+            render_anim();
             clear_screen = true;
         } else {
             if (clear_screen == true) {
@@ -118,51 +799,31 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
                 oled_render();
                 clear_screen = false;
             }
-            render_logo();
-            oled_set_cursor(8,2);
             switch(selected_layer){
                 case 0:
-                    oled_write_P(PSTR("Lock Layer 0"), false);
+                    if (display_keyboard == true){
+                        display_keyboard = false;
+                    }
                     break;
                 case 1:
-                    oled_write_P(PSTR("Lock Layer 1"), false);
+                    display_keyboard = true;
+                    render_keyboard();
                     break;
                 case 2:
-                    oled_write_P(PSTR("Lock Layer 2"), false);
+                    if (display_keyboard == true){
+                        display_keyboard = false;
+                    }
+                    oled_write_P(PSTR("WIP layer 2"), false); 
                     break;
                 case 3:
-                    oled_write_P(PSTR("Lock Layer 3"), false);
+                    if (display_keyboard == true){
+                        display_keyboard = false;
+                    }
+                    oled_write_P(PSTR("WIP layer 3"), false); 
                     break;
                 default:
-                    oled_write_P(PSTR("Lock Layer ?"), false);    // Should never display, here as a catchall
+                    oled_write_P(PSTR("WIP"), false);    // Should never display, here as a catchall
             }
-            oled_set_cursor(8,3);
-            if (get_highest_layer(layer_state) == selected_layer) {
-                oled_write_P(PSTR("            "), false);
-            } else {
-                switch (get_highest_layer(layer_state)) {
-                    case 0:
-                        oled_write_P(PSTR("Temp Layer 0"), false);
-                        break;
-                    case 1:
-                        oled_write_P(PSTR("Temp Layer 1"), false);
-                        break;
-                    case 2:
-                        oled_write_P(PSTR("Temp Layer 2"), false);
-                        break;
-                    case 3:
-                        oled_write_P(PSTR("Temp Layer 3"), false);
-                        break;
-                    default:
-                        oled_write_P(PSTR("Temp Layer ?"), false);    // Should never display, here as a catchall
-                }
-            }
-            led_t led_state = host_keyboard_led_state();
-            oled_set_cursor(8,0);
-            oled_write_P(led_state.scroll_lock ? PSTR("SCRLK") : PSTR("     "), false);
-            oled_set_cursor(8,1);
-            oled_write_P(led_state.num_lock ? PSTR("NLCK ") : PSTR("     "), false);
-            oled_write_P(led_state.caps_lock ? PSTR("CAPS ") : PSTR("     "), false);
         }
     }
 #endif
