@@ -1,5 +1,6 @@
 WPM_ENABLE = yes
-RAW_ENABLE = yes  # Enable RAW HID communication to PC 
+RAW_ENABLE = yes
+# VIA_ENABLE = yes # Enable RAW HID communication to PC 
 
 OLED_TIMEOUT = 3500
 OLED_FADE_OUT = yes

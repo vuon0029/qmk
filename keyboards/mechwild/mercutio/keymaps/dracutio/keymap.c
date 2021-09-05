@@ -21,12 +21,6 @@
 #include "header.h"
 #include <string.h>
 
-// OLED setup for bongocat
-// #define IDLE_FRAMES 3
-// #define IDLE_SPEED 1000
-// #define ANIM_FRAME_DURATION 700
-// #define ANIM_SIZE 512s
-
 char wpm_str[10];
 
 /* Matrix display is 19 x 9 pixels */
@@ -57,15 +51,10 @@ uint8_t selected_layer = 0;
 
 bool is_hid_connected = false;
 char hid_info_str[20];
-int screen_data_index = 0;
 uint8_t screen_max_count = 0; 
 uint8_t screen_data_buffer[SERIAL_SCREEN_BUFFER_LENGTH - 1] =  {0}; 
 uint8_t volatile serial_slave_screen_buffer[SERIAL_SCREEN_BUFFER_LENGTH] = {0};
-bool volatile hid_screen_change = false;
-uint32_t RAW_EPSIZE = 32;
 
-
-#ifdef RAW_ENABLE
 
 void update_screen_index(void) {
   // Send the current info screen index to the connected node script so that it can pass back the new data
@@ -77,98 +66,32 @@ void update_screen_index(void) {
 }
 
 void raw_hid_receive(uint8_t *data, uint8_t length) {
-  //PC connected, so set the flag to show a message on the master display
-  is_hid_connected = true;
-
-  // Initial connections use '1' in the first byte to indicate this
-  if (length > 1 && data[1] == 1) {
-    // New connection so restart screen_data_buffer
-    screen_data_index = 0;
-
+  //Check for first time
+  if (length > 1 && data[0] == 1) {
+    //PC connected, so set the flag to show a message on the master display
+    is_hid_connected = true;
     // Tell the connection which info screen we want to look at initially
     update_screen_index();
-
     return;
   }
 
-  // Otherwise the data we receive is one line of the screen to show on the display
-  if (length >= 21) {
+    // Otherwise the data we receive is one line of the screen to show on the display
       
-    // Copy the data into our buffer and increment the number of lines we have got so far
-    // memcpy((char*)&screen_data_buffer, data, 84);
-    // screen_data_index = screen_data_index*2; //1
+    memcpy((char*)&screen_data_buffer, data, 32);
 
-   
-    // memcpy((char*)&screen_data_buffer, data, 84);
-    // screen_data_index++;
+    // Now get ready to transfer the whole 4 lines to the slave side of the keyboard.
+    // First clear the transfer buffer with spaces just in case.
+    memset((char*)&serial_slave_screen_buffer[0], ' ', sizeof(serial_slave_screen_buffer));
 
-    //   if (length >= 21) {
-      
-    // Copy the data into our buffer and increment the number of lines we have got so far
-    memcpy((char*)&screen_data_buffer, data, 84);
-    screen_data_index++; //1
+    // Copy in the 4 lines of screen data, but start at index 1, we use index 0 to indicate a connection in the slave code
+    memcpy((char*)&serial_slave_screen_buffer[1], screen_data_buffer, sizeof(screen_data_buffer));
 
-   
-    // memcpy((char*)&screen_data_buffer[screen_data_index * 21], data, 21);
-    // screen_data_index++;
-    
+    // Set index 0 to indicate a connection has been established
+    serial_slave_screen_buffer[0] = 1;
 
-    if (screen_data_index == 2) {
-        // Reset the buffer back to receive the next full screen data
-         screen_data_index = 0;
-
-        // Now get ready to transfer the whole 4 lines to the slave side of the keyboard.
-        // First clear the transfer buffer with spaces just in case.
-        memset((char*)&serial_slave_screen_buffer[0], ' ', sizeof(serial_slave_screen_buffer));
-
-        // Copy in the 4 lines of screen data, but start at index 1, we use index 0 to indicate a connection in the slave code
-        memcpy((char*)&serial_slave_screen_buffer[1], screen_data_buffer, sizeof(screen_data_buffer));
-
-        // Set index 0 to indicate a connection has been established
-        serial_slave_screen_buffer[0] = 1;
-
-        // Make sure to zero terminate the buffer
-        serial_slave_screen_buffer[sizeof(serial_slave_screen_buffer) - 1] = 0;
-
-        // Indicate that the screen data has changed and needs transferring to the slave side
-        hid_screen_change = true;
-        // }
-    }
-//   }
-
-
-    // if (screen_data_index == 4) {
-    //     // Reset the buffer back to receive the next full screen data
-    //     screen_data_index = 0;
-
-    //     // Now get ready to transfer the whole 4 lines to the slave side of the keyboard.
-    //     // First clear the transfer buffer with spaces just in case.
-    //     memset((char*)&serial_slave_screen_buffer[0], ' ', sizeof(serial_slave_screen_buffer));
-
-    //     // Copy in the 4 lines of screen data, but start at index 1, we use index 0 to indicate a connection in the slave code
-    //     memcpy((char*)&serial_slave_screen_buffer[1], screen_data_buffer, sizeof(screen_data_buffer));
-
-    //     // Set index 0 to indicate a connection has been established
-    //     serial_slave_screen_buffer[0] = 1;
-
-    //     // Make sure to zero terminate the buffer
-    //     serial_slave_screen_buffer[sizeof(serial_slave_screen_buffer) - 1] = 0;
-
-    //     // Indicate that the screen data has changed and needs transferring to the slave side
-    //     hid_screen_change = true;
-    //     // }
-    // }
-  }
+    // Make sure to zero terminate the buffer
+    serial_slave_screen_buffer[sizeof(serial_slave_screen_buffer) - 1] = 0;
 }
-
-#endif
-
-// static long int oled_timeout = 3500;
-// bool gui_on = true;
-// uint32_t anim_timer = 0;
-// uint32_t anim_sleep = 0;
-// uint8_t current_idle_frame = 0;
-// uint8_t current_tap_frame = 0;
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 [0] = LAYOUT_all(
@@ -183,21 +106,21 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     KC_ESC,           KC_Q,    KC_W,    KC_E,    KC_R,    KC_T,    KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,    KC_BSPC,
     KC_TAB,            KC_A,    KC_S,    KC_D,    KC_F,    KC_G,    KC_H,    KC_J,    KC_K,    KC_L,    KC_QUOT, KC_ENT,
     KC_LSFT, KC_SLSH, KC_Z,    KC_X,    KC_C,    KC_V,    KC_B,    KC_N,    KC_M,    KC_COMM, KC_DOT,           KC_RSFT,
-    KC_LCTL, KC_LGUI, KC_LALT,          KC_SPC,  KC_SPC,           KC_SPC,           KC_RALT, MO(2),            KC_RCTL ),
+    KC_LCTL, KC_LGUI, KC_LALT,          KC_SPC,  KC_SPC,           KC_SPC,           KC_RALT, MO(2),            MO(1) ),
 
   [2] = LAYOUT_all(
                                                                                                                 KC_TRNS,
     KC_TRNS,          KC_F1,   KC_F2,   KC_F3,   KC_F4,   KC_F5,   KC_F6,   KC_F7,   KC_F8,   KC_F9,   KC_F10,  KC_TRNS,
-    KC_CAPS,          KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS,
+    KC_CAPS,          KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_F11, KC_F12, KC_TRNS,
     KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS,          KC_TRNS,
     KC_TRNS, KC_TRNS, KC_TRNS,          KC_TRNS, KC_TRNS,          KC_TRNS,          KC_TRNS, KC_TRNS,          KC_TRNS ),
 
   [3] = LAYOUT_all(
                                                                                                                 KC_TRNS,
-  	KC_TRNS,          KC_0, KC_1, KC_2, KC_3, KC_4, KC_5, KC_6, KC_7, KC_8, KC_9, KC_0,
-  	KC_TRNS,          KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS,
-  	KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS,          KC_TRNS,
-  	KC_TRNS, KC_TRNS, KC_TRNS,          KC_TRNS, KC_TRNS,          KC_TRNS,          KC_TRNS, KC_TRNS,          KC_TRNS )
+    KC_TRNS,          KC_1,   KC_2,   KC_3,   KC_4,   KC_5,   KC_6,   KC_7,   KC_8,   KC_9,   KC_0,  KC_TRNS,
+    KC_CAPS,          KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS,
+    KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS,          KC_TRNS,
+    KC_TRNS, KC_TRNS, KC_TRNS,          KC_TRNS, KC_TRNS,          KC_TRNS,          KC_TRNS, KC_TRNS,          KC_TRNS )
 };
 
 #ifdef ENCODER_ENABLE       // Encoder Functionality
@@ -245,17 +168,14 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         return OLED_ROTATION_180;       // flips the display 180 degrees if offhand
     }
 
-    bool clear_screen = false;          // used to manage singular screen clears to prevent display glitch
 
     static void render_stats(void){
-        // clear_screen = true;
         oled_set_cursor(0,0);
-        oled_write(serial_slave_screen_buffer[0] > 0 ? (char*)serial_slave_screen_buffer+1 : PSTR("HID is needed\n"), false);
-        // oled_write(serial_slave_screen_buffer[0] > 0 ? (char*)screen_data_buffer+1 : PSTR("Need HID Connection"), false);
+        oled_write(serial_slave_screen_buffer[0] > 0 ? (char*)serial_slave_screen_buffer+1 : PSTR(""), false);
     }
 
     static void render_hid(void){
-        oled_set_cursor(16,1);
+        oled_set_cursor(16,3);
         oled_write_P(is_hid_connected == true ? PSTR("HID") : PSTR(""), false);
     }
 
@@ -263,7 +183,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
 
         oled_set_cursor(2, 3);
-        oled_write_P(PSTR("typing matrix\n"), false);
+        oled_write_P(PSTR("MATRIX\n"), false);
 
         oled_set_cursor(11, 0);
         sprintf(wpm_str, "wpm: %03d", get_current_wpm());
@@ -900,15 +820,6 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 }
 
     void oled_task_user(void) {
-
-        // if ( IS_HOST_LED_OFF(USB_LED_NUM_LOCK) && IS_HOST_LED_OFF(USB_LED_CAPS_LOCK) && selected_layer == 0 && get_highest_layer(layer_state) == 0 ) {
-            
-        // } else {
-            if (clear_screen == true) {
-                oled_clear();
-                oled_render();
-                clear_screen = false;
-            }
             switch(selected_layer){
                 case 0:
                     if (display_keyboard == true){
@@ -916,9 +827,9 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
                     }
                     oled_set_cursor(0, 0);
                     oled_write_P(PSTR("Dracutio 1.0\n"), false);
-                    render_hid();
                     oled_set_cursor(2, 3);
-                    oled_write_P(PSTR("main layer\n"), false);
+                    oled_write_P(PSTR("MAIN\n"), false);
+                    render_hid();
                     break;
                 case 1:
                     render_keyboard();
@@ -929,34 +840,21 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
                     if (display_keyboard == true){
                         display_keyboard = false;
                     }
-                    // if (is_hid_connected){
                         render_stats();
-                    // } else {
                         oled_set_cursor(2, 3);
-                        oled_write_P(PSTR("fn layer\n"), false); 
-                    // }
-                    render_stats();
-                
-                    // render_hid();
+                        oled_write_P(PSTR("FN\n"), false); 
                     break;
                 case 3:
                     if (display_keyboard == true){
                         display_keyboard = false;
                     }
-                    // if (is_hid_connected){
                         render_stats();
-                    // } else {
                         oled_set_cursor(2, 3);
-                        oled_write_P(PSTR("num layer\n"), false); 
-                    // }
-                    
-                   
-                    // render_hid();
+                        oled_write_P(PSTR("NUM\n"), false); 
                     break;
                 default:
-                    oled_write_P(PSTR("???"), false);    // Should never display, here as a catchall
+                    oled_write_P(PSTR(""), false);    // Should never display, here as a catchall
             }
-        // }
 
         led_t led_state = host_keyboard_led_state();
         oled_set_cursor(15,2);
