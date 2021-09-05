@@ -1,4 +1,5 @@
 # Dracutio Keymap for OLED screens
+> This repo was forked from the official QMK github and has been modified by me. Follow at your own risk, since I'm not a professional at QMK
 
 ## Steps
 
